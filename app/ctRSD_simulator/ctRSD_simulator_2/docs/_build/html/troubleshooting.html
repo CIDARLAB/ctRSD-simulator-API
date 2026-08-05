@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Troubleshooting &mdash; ctRSD-simulator-2.0 2.1.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Simple Examples" href="Simple-Examples.html" />
+    <link rel="prev" title="Sequence Compiler" href="SeqCompiler.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> ctRSD-simulator-2.0
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">General:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="Overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Model-Implementation.html">Model Reactions and Implementation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ImportSim.html">Installing and Initializing Simulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ClassInitials.html">RSD_sim Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Functions.html">Functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="SeqCompiler.html">Sequence Compiler</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#accessing-variables-in-the-simulator">Accessing Variables in the Simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#not-specifying-enough-domains-in-rsd-sim-initialization">Not specifying enough domains in RSD_sim() initialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#simulations-taking-a-long-time">Simulations taking a long time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#speeding-up-comparator-gate-simulations">Speeding Up Comparator Gate Simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#overriding-rate-constants">Overriding Rate Constants</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">General Examples:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="Simple-Examples.html">Simple Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Simulator-Features.html">Advanced Simulator Features</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples from Publications:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="SA_Examples.html">2022 Science Advances Paper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ACS_syn_biol_Examples.html">2023 ACS Synthetic Biology Paper</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ctRSD-simulator-2.0</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Troubleshooting</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/troubleshooting.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="troubleshooting">
+<span id="id1"></span><h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permalink to this heading"></a></h1>
+<p>This page offers some useful tips to troubleshoot based off some of the problems we encountered when building the simulator.</p>
+<section id="accessing-variables-in-the-simulator">
+<h2>Accessing Variables in the Simulator<a class="headerlink" href="#accessing-variables-in-the-simulator" title="Permalink to this heading"></a></h2>
+<p>In order to troubleshoot a script utilizing the simulator, you may want to access different variables that are found in the simulator, but not locally available in your script. This can help with troubleshooting issues by making sure everything is defined as you think it should be.</p>
+<p><strong>A detailed description of the matrix setup of the model variables can be found at</strong> <a class="reference internal" href="Model-Implementation.html#detailedmodeldescription"><span class="std std-ref">Detailed Model Description</span></a>.</p>
+<div class="admonition-note admonition">
+<p class="admonition-title">Note:</p>
+<p>Only varibles that have the “self” attachment are available to be accessed from outside the simulator (Ex: self.variable_name).</p>
+<p>If you wish to pull out a variable that does not currently have the self attachment, simply add “self.” before every occurence of that variable in the simulator.</p>
+</div>
+<p>In order to access any variable with the “self” attachment (Example Below):</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>The bulk of the simulator’s code (excluding the rate equations function) exists in the <em>RSDs_sim()</em> Python class. Therefore, as you would to run a simulation, you must first instantiate an object of the RSD_sim class. Details to do this can be found <a class="reference internal" href="ImportSim.html#importsim"><span class="std std-ref">here</span></a>.</p></li>
+<li><p>Assuming the model is downloaded, imported, and instantiated accessing a variable is very similar to calling one of the functions. You simply call the variable name with the name of the class object’s attachment. For example, if you defined the model instantiation as “model”, then the format for accessing a variable would be “model.variable_name”.</p></li>
+</ol>
+</div></blockquote>
+<figure class="align-center" id="id2">
+<img alt="_images/Troubleshooting-accessingvariables.png" class="with-border" src="_images/Troubleshooting-accessingvariables.png" />
+<figcaption>
+<p><span class="caption-text"><strong>How to access variables present in simulator</strong></span><a class="headerlink" href="#id2" title="Permalink to this image"></a></p>
+</figcaption>
+</figure>
+<p><strong>Critical values to check for customized simulations include:</strong></p>
+<blockquote>
+<div><dl class="simple">
+<dt>The matrices holding DNA template concentrations</dt><dd><p>These are specified as <em>model.[name]temp_con</em>, where [name] can be G, O, TG, F, AG, CG</p>
+</dd>
+<dt>The matrices holding initial concentrations if these were changed in <em>molecular_species()</em></dt><dd><p>These are specified as <em>model.[name]_ic</em>, where [name] can be uG, G, GO, O, TG, F, AG, CG, R, S, Q, AGOa, AGOb, AGFb, CGOa, CGOb</p>
+</dd>
+<dt>The matrices holding rate constants if these were changed in <em>global_rate_constants()</em> or <em>molecular_species()</em></dt><dd><p>These are specified as <em>model.[name]</em>, where [name] is the name of the rate constant (ktxnO, krsd, krz, kdrd, kssdO, etc)</p>
+</dd>
+</dl>
+</div></blockquote>
+</section>
+<section id="not-specifying-enough-domains-in-rsd-sim-initialization">
+<h2>Not specifying enough domains in RSD_sim() initialization<a class="headerlink" href="#not-specifying-enough-domains-in-rsd-sim-initialization" title="Permalink to this heading"></a></h2>
+<p>When initializing the model with <a class="reference internal" href="ImportSim.html#importsim"><span class="std std-ref">RSD_sim()</span></a>, the default number of domains used to initialize the model is 5. If the highest index of any domain of a species you define in <em>molecular_species()</em> is greater than 5 then an “index out of bounds” error will appear. For example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># create the model instance</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">RSDs</span><span class="o">.</span><span class="n">RSD_sim</span><span class="p">()</span> <span class="c1"># default # of domains (5 domains)</span>
+
+<span class="c1"># specify species involved in the system</span>
+<span class="n">model</span><span class="o">.</span><span class="n">molecular_species</span><span class="p">(</span><span class="s1">&#39;G{7,2}&#39;</span><span class="p">,</span><span class="n">DNA_con</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>will produce an error because index 7 of G{7,2} exceeds the default number of domains (5) specified with <em>RSD_sim()</em>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">line</span> <span class="mi">30</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+<span class="n">model</span><span class="o">.</span><span class="n">molecular_species</span><span class="p">(</span><span class="s1">&#39;G{7,2}&#39;</span><span class="p">,</span><span class="n">DNA_con</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>
+
+<span class="n">File</span> <span class="s2">&quot;filepath&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">779</span><span class="p">,</span> <span class="ow">in</span> <span class="n">molecular_species</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">Gtemp_con</span><span class="p">[</span><span class="n">gateInd1</span><span class="p">,</span><span class="n">gateInd2</span><span class="p">]</span><span class="o">=</span><span class="n">DNA_con</span>
+
+<span class="ne">IndexError</span><span class="p">:</span> <span class="n">index</span> <span class="mi">6</span> <span class="ow">is</span> <span class="n">out</span> <span class="n">of</span> <span class="n">bounds</span> <span class="k">for</span> <span class="n">axis</span> <span class="mi">0</span> <span class="k">with</span> <span class="n">size</span> <span class="mi">5</span>
+</pre></div>
+</div>
+<p>To fix this, the total number of domains initialized in <em>RSD_sim()</em> needs to be at least 7:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># create the model instance</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">RSDs</span><span class="o">.</span><span class="n">RSD_sim</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span> <span class="c1"># increasing total number of domains for initialization to 7</span>
+
+<span class="c1"># specify species involved in the system</span>
+<span class="n">model</span><span class="o">.</span><span class="n">molecular_species</span><span class="p">(</span><span class="s1">&#39;G{7,2}&#39;</span><span class="p">,</span><span class="n">DNA_con</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="simulations-taking-a-long-time">
+<h2>Simulations taking a long time<a class="headerlink" href="#simulations-taking-a-long-time" title="Permalink to this heading"></a></h2>
+<p>The simulation time increases as the number of domains in the system and the simulated time increases. So to speed up specific simulations you can try to minimize the number of domains necessary to describe the system and specify this minimum number of domains in <em>RSD_sim()</em> during initialization. You can also decrease the total simulated time (t_sim).</p>
+<p>We primarily saw issues with simulations taking a long time to solve for systems with comparator gates (CG) and additional tips for those specific types or simulations are covered below.</p>
+<p>Changing the <em>smethod</em> in <a class="reference internal" href="Functions.html#simulate"><span class="std std-ref">simulate</span></a> can also speed up simulations but numerical instabilities are also possible.</p>
+</section>
+<section id="speeding-up-comparator-gate-simulations">
+<h2>Speeding Up Comparator Gate Simulations<a class="headerlink" href="#speeding-up-comparator-gate-simulations" title="Permalink to this heading"></a></h2>
+<p>Due to comparator gate reactions utilizing very disparate time scales, simulations using comparator gates may have a much slower time efficiency than the other reactions. Below are some different options for reducing the simulation time when using comparator gates.</p>
+<dl class="simple">
+<dt>Troubleshooting options:</dt><dd><ol class="arabic simple">
+<li><p>Utilize the BDF solving method. BDF is an implicit method meant for stiff equations, so it can help to process the CG reactions      quicker. The solving method used can be changed in <a class="reference internal" href="Functions.html#simulate"><span class="std std-ref">simulate</span></a>.</p></li>
+<li><p>If you are looping through the simulator many times, parallelizing these loops can also greatly speed time efficiency. Python offers many different ways to create parallel loops, such as the <em>multiprocessing</em> package.</p></li>
+</ol>
+</dd>
+</dl>
+</section>
+<section id="overriding-rate-constants">
+<h2>Overriding Rate Constants<a class="headerlink" href="#overriding-rate-constants" title="Permalink to this heading"></a></h2>
+<p>Since both <a class="reference internal" href="Functions.html#molecular-species"><span class="std std-ref">molecular_species</span></a> and <a class="reference internal" href="Functions.html#global-rate-constants"><span class="std std-ref">global_rate_constants</span></a> offer the ability to change the rate constants available in the simulator, you may find one function overriding changes you made in the other.</p>
+<dl class="simple">
+<dt>Troubleshooting Tips (Examples Below):</dt><dd><ol class="arabic simple">
+<li><p>Both functions will only alter rate constants that are specified in the call of the function. If you do not specify a particular rate constant, then neither functions will change it from its most recent value.</p></li>
+<li><p>The order of the changes made by the two functions depends on the order in which the functions are called in the script. Whichever function is called first will have its changes come into effect first. Therefore, if you call both functions for the same rate constant, or either functions multiple times for the same rate constant, then the last function call will reflect the most recent value of that rate constant.</p></li>
+</ol>
+</dd>
+</dl>
+<figure class="align-center" id="id3">
+<img alt="_images/Troubleshooting-overriding1.png" class="with-border" src="_images/Troubleshooting-overriding1.png" />
+<figcaption>
+<p><span class="caption-text"><strong>global_rate_constants before molecular species</strong></span><a class="headerlink" href="#id3" title="Permalink to this image"></a></p>
+</figcaption>
+</figure>
+<figure class="align-center" id="id4">
+<img alt="_images/Troubleshooting-overriding2.png" class="with-border" src="_images/Troubleshooting-overriding2.png" />
+<figcaption>
+<p><span class="caption-text"><strong>molecular_species before global_rate_constants</strong></span><a class="headerlink" href="#id4" title="Permalink to this image"></a></p>
+</figcaption>
+</figure>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="SeqCompiler.html" class="btn btn-neutral float-left" title="Sequence Compiler" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="Simple-Examples.html" class="btn btn-neutral float-right" title="Simple Examples" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Samuel Schaffter, Terence Murphy.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,3 @@
+[submodule "ctRSD-simulator"]
+	path = ctRSD-simulator/app
+	url = https://github.com/usnistgov/ctRSD-simulator
