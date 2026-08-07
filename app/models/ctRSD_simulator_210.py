@@ -499,7 +499,8 @@ def build_annotations(features, seq_to_partID_d, temp_len=0):
                         "note": part_id,
                         },
 
-                    "orientation": part_orientation
+                    "orientation": part_orientation,
+                    "part_type": part_type
                 })
                 start = start + part_len
 
@@ -3142,6 +3143,8 @@ class RSD_sim:
 
         dna_part_IDs = [part['qualifiers']['note'] for part in dna_annotations]
         rna_part_IDs = [part['qualifiers']['note'] for part in rna_annotations]
+        dna_part_types = [part['part_type'] for part in dna_annotations]
+        rna_part_types = [part['part_type'] for part in rna_annotations]
 
         
         return(
@@ -3149,6 +3152,8 @@ class RSD_sim:
             template[1], 
             dna_part_IDs,
             rna_part_IDs,
+            dna_part_types,
+            rna_part_types,
             genbank_dna, 
             genbank_rna
         )

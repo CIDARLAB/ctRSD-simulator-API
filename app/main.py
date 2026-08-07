@@ -5,13 +5,12 @@ import uvicorn
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional, Dict, Any
 
-from app.models.ctRSD_simulator_210 import RSD_sim, FILEPATH_DOMAINS, FILEPATH_OUTPUTS
+from app.models.ctRSD_simulator_210 import RSD_sim, FILEPATH_DOMAINS
 
 api = FastAPI()
 
 class CompileRequest(BaseModel):
     name: str = Field(..., description="Name of the sequence to compile")
-    filepath: Optional[str] = Field(None, description="Path to the file containing the sequence")
     Rz: str = Field('Ro', description="Ribozyme parameter")
     L: str = Field('L', description="Ribozyme Linker parameter")
     term: str = Field('T7t', description="Terminator parameter")
@@ -36,12 +35,22 @@ class CompileRequest(BaseModel):
     CDS: str = Field('', description="CDS parameter")
     rflap: str = Field('', description="rflap parameter")
 
+class CompileResponse(BaseModel):
+    dna_template: str = Field(..., description="DNA template sequence")
+    rna_template: str = Field(..., description="RNA template sequence")
+    dna_part_IDs: List[str] = Field(..., description="List of DNA part IDs")
+    rna_part_IDs: List[str] = Field(..., description="List of RNA part IDs")
+    dna_part_types: List[str] = Field(..., description="List of DNA part types")
+    rna_part_types: List[str] = Field(..., description="List of RNA part types")
+    genbank_dna: str = Field(..., description="GenBank DNA file content")
+    genbank_rna: str = Field(..., description="GenBank RNA file content")
+
 @api.post('/compile')
 def compile(request: CompileRequest):
     model = RSD_sim()
     result = model.ctRSD_seq_compile(
         name = request.name,
-        filepath = request.filepath or FILEPATH_DOMAINS,
+        filepath = FILEPATH_DOMAINS,
         Rz = request.Rz,
         L = request.L,
         term = request.term,
@@ -66,15 +75,17 @@ def compile(request: CompileRequest):
         CDS = request.CDS,
         rflap = request.rflap
     )
-    
-    return JSONResponse(content=jsonable_encoder({
-        "dna_template": result[0], # DNA template sequence
-        "rna_template": result[1], # RNA template sequence
-        "dna_part_IDs": result[2], # DNA part IDs
-        "rna_part_IDs": result[3], # RNA part IDs
-        "genbank_dna": result[4],  # GenBank DNA file content
-        "genbank_rna": result[5]   # GenBank RNA file content
-    }))
+
+    return CompileResponse(
+        dna_template=result[0],
+        rna_template=result[1],
+        dna_part_IDs=result[2],
+        rna_part_IDs=result[3],
+        dna_part_types=result[4],
+        rna_part_types=result[5],
+        genbank_dna=result[6],
+        genbank_rna=result[7]
+    )
 
 
 @api.get('/hello')
