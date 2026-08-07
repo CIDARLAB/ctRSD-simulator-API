@@ -97,4 +97,4 @@ def hello():
 
 
 if __name__ == '__main__':
-    uvicorn.run(api, host="0.0.0.0", port=7000, log_level="info")
+    uvicorn.run(api, host="0.0.0.0", port=8010, log_level="info")
