@@ -35,7 +35,6 @@ class CompileRequest(BaseModel):
     d: str = Field('', description="d parameter")
     CDS: str = Field('', description="CDS parameter")
     rflap: str = Field('', description="rflap parameter")
-    output_genbank: bool = Field(False, description="output_genbank parameter")
 
 @api.post('/compile')
 def compile(request: CompileRequest):
@@ -67,9 +66,14 @@ def compile(request: CompileRequest):
         CDS = request.CDS,
         rflap = request.rflap
     )
+    
     return JSONResponse(content=jsonable_encoder({
-        "dna_template": result[0],
-        "rna_template": result[1]
+        "dna_template": result[0], # DNA template sequence
+        "rna_template": result[1], # RNA template sequence
+        "dna_part_IDs": result[2], # DNA part IDs
+        "rna_part_IDs": result[3], # RNA part IDs
+        "genbank_dna": result[4],  # GenBank DNA file content
+        "genbank_rna": result[5]   # GenBank RNA file content
     }))
 
 
@@ -82,4 +86,4 @@ def hello():
 
 
 if __name__ == '__main__':
-    uvicorn.run(api, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(api, host="0.0.0.0", port=7000, log_level="info")

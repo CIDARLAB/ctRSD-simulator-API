@@ -462,31 +462,58 @@ def domain_seq_selection(name,inps,outps,fuels,dashcheckInps,dashcheckOuts,Echec
     
     return [ei_S,ei_Sp,eo_S,r_S,d_S,s_S,s_Sp,cp_S,n_S,c_S,cds_S,rflap_S,o_bm_S,o_th_Sp,i_bm_S,i_th_S,i_bm_Sp,o_th_S,hp5_S,l_S,rz_S,term_S,prom_S,cl,us_S,ds_S]
 
-def build_annotations(features):
+def build_annotations(features, seq_to_partID_d, temp_len=0):
     annotations = []
-    for feature in features:
+    start = 1
+    for feature_map in features:
+        for feature_name, feature_value in feature_map.items():
+            part_type = feature_name
+            part_seq = feature_value[0] if feature_value[0] else ""
+            part_len = len(part_seq)
 
-        name = feature.get("name", "feature")
-        start = feature.get("start", 1)
-        end = feature.get("end", 1)
-        qualifiers = feature.get("qualifiers", {})
 
-        annotations.append({
-            "name": name,
-            "start": start,
-            "end": end,
-            "qualifiers": qualifiers
-        })
+            part_id = ""
+            if part_seq in seq_to_partID_d:
+                part_id = seq_to_partID_d[part_seq]
+                part_orientation = "forward"
+            elif rc_seq(part_seq, spec_out='rc') in seq_to_partID_d:
+                part_id = seq_to_partID_d[rc_seq(part_seq, spec_out='rc', rna=0)[1:-1]]
+                part_orientation = "reverse"
+            elif len(feature_value) > 1:
+                part_id = feature_value[1]
+                part_orientation = "forward" # default orientation if not specified
+            elif part_seq == "|":
+                continue  # Skip adding an annotation for the cleavage site
+            else:
+                raise ValueError(f"Sequence '{part_seq}' not found in domains excel dictionary.")
+
+            if part_seq and part_seq != "|":
+                end = start + part_len - 1 if temp_len == 0 else min(start + part_len - 1, temp_len)
+                annotations.append({
+                    "name": "misc_feature",
+                    "start": start,
+                    "end": end,
+
+                    "qualifiers": {
+                        "label": part_type + "-" + part_id,
+                        "note": part_id,
+                        },
+
+                    "orientation": part_orientation
+                })
+                start = start + part_len
 
     return annotations
 
-def write_genbank_rna(sequence, output_path=None, locus_name="ctRSD_sequence", annotations=None):
+def write_genbank(sequence, output_path=None, locus_name="ctRSD_sequence", annotations=None, rna=False):
+    seq_type = "RNA" if rna else "DNA"
+
     if not output_path:
-        output_path = os.path.join(os.getcwd(), f"{locus_name}.gb")
+        output_path = os.path.join(os.getcwd(), f"{locus_name}{seq_type}.gb")
     output_path = os.path.abspath(output_path)
 
     if os.path.isdir(output_path):
-        output_path = os.path.join(output_path, f"{locus_name}.gb")
+        output_path = os.path.join(output_path, f"{locus_name}{seq_type}.gb")
     elif os.path.splitext(output_path)[1].lower() != ".gb":
         output_path = f"{output_path}.gb"
 
@@ -497,7 +524,7 @@ def write_genbank_rna(sequence, output_path=None, locus_name="ctRSD_sequence", a
         raise ValueError("Sequence is empty")
 
     with open(output_path, "w", encoding="utf-8") as fh:
-        fh.write(f"LOCUS       {locus_name[:16]:<16} {len(seq)} bp    RNA     linear   UNK 01-JAN-2000\n")
+        fh.write(f"LOCUS       {locus_name[:16]:<16} {len(seq)} bp    {seq_type}     linear   UNK 01-JAN-2000\n")
         fh.write(f"DEFINITION  {locus_name}\n")
         fh.write("ACCESSION   \n")
         fh.write("VERSION     \n")
@@ -507,7 +534,7 @@ def write_genbank_rna(sequence, output_path=None, locus_name="ctRSD_sequence", a
         fh.write("FEATURES             Location/Qualifiers\n")
         fh.write(f"     source          1..{len(seq)}\n")
         fh.write("                     /organism=\"synthetic construct\"\n")
-        fh.write("                     /mol_type=\"other RNA\"\n")
+        fh.write(f"                     /mol_type=\"other {seq_type}\"\n")
 
         if annotations:
             for ann in annotations:
@@ -516,10 +543,11 @@ def write_genbank_rna(sequence, output_path=None, locus_name="ctRSD_sequence", a
                     start = ann.get("start", 1)
                     end = ann.get("end", len(seq))
                     qualifiers = ann.get("qualifiers", {})
+                    orientation = ann.get("orientation", None)
                 else:
-                    feature_name, start, end, qualifiers = ann
+                    feature_name, start, end, qualifiers, orientation = ann
 
-                fh.write(f"     {feature_name:<16} {start}..{end}\n")
+                fh.write(f"     {feature_name:<16} {f'complement(' if orientation == 'reverse' else ''}{start}..{end}{')' if orientation == 'reverse' else ''}\n")
                 if isinstance(qualifiers, dict):
                     for key, value in qualifiers.items():
                         if value is not None:
@@ -537,6 +565,57 @@ def write_genbank_rna(sequence, output_path=None, locus_name="ctRSD_sequence", a
         fh.write("//\n")
 
     return output_path
+
+def write_genbank_text(sequence, locus_name="ctRSD_sequence", annotations=None, rna=False):
+    genbank_text_list = []
+
+    seq_type = "RNA" if rna else "DNA"
+
+    seq = "".join(ch for ch in str(sequence).upper() if ch.isalnum())
+    if not seq:
+        raise ValueError("Sequence is empty")
+
+    genbank_text_list.append(f"LOCUS       {locus_name[:16]:<16} {len(seq)} bp    {seq_type}     linear   UNK 01-JAN-2000\n")
+    genbank_text_list.append(f"DEFINITION  {locus_name}\n")
+    genbank_text_list.append("ACCESSION   \n")
+    genbank_text_list.append("VERSION     \n")
+    genbank_text_list.append("KEYWORDS    .\n")
+    genbank_text_list.append("SOURCE      synthetic construct\n")
+    genbank_text_list.append("  ORGANISM  synthetic construct\n")
+    genbank_text_list.append("FEATURES             Location/Qualifiers\n")
+    genbank_text_list.append(f"     source          1..{len(seq)}\n")
+    genbank_text_list.append("                     /organism=\"synthetic construct\"\n")
+    genbank_text_list.append(f"                     /mol_type=\"other {seq_type}\"\n")
+
+    if annotations:
+        for ann in annotations:
+            if isinstance(ann, dict):
+                feature_name = ann.get("name", "feature")
+                start = ann.get("start", 1)
+                end = ann.get("end", len(seq))
+                qualifiers = ann.get("qualifiers", {})
+                orientation = ann.get("orientation", None)
+            else:
+                feature_name, start, end, qualifiers, orientation = ann
+
+            genbank_text_list.append(f"     {feature_name:<16} {f'complement(' if orientation == 'reverse' else ''}{start}..{end}{')' if orientation == 'reverse' else ''}\n")
+            if isinstance(qualifiers, dict):
+                for key, value in qualifiers.items():
+                    if value is not None:
+                        genbank_text_list.append(f'                     /{key}="{value}"\n')
+            elif isinstance(qualifiers, (list, tuple)):
+                for qual in qualifiers:
+                    genbank_text_list.append(f"                     {qual}\n")
+
+    genbank_text_list.append("ORIGIN\n")
+    for start in range(0, len(seq), 60):
+        chunk = seq[start:start+60]
+        genbank_text_list.append(f"{start+1:>9} ")
+        genbank_text_list.append(" ".join(chunk[i:i+10] for i in range(0, len(chunk), 10)))
+        genbank_text_list.append("\n")
+    genbank_text_list.append("//\n")
+
+    return "".join(genbank_text_list)
 
 
 '''
@@ -1876,6 +1955,18 @@ class RSD_sim:
         for m in th_d.keys():
             th_d[m] = [rc_seq(th_d[m][0])[1:-1]]
 
+        # Seq to Part ID Dictionary
+        seq_to_partID_d = {}
+        for part_d in [th_d, I_BM_d, O_BM_d, r_d, L_d, e_d, Rz_d, term_d, prom_d, hp5_d, s_d, us_d, ds_d, cds_d, rflap_d, cp_d, n_d, c_d, d_d]:
+            for key, value in part_d.items():
+                seq_to_partID_d[value[0]] = key
+
+        for part_d in [th_d, I_BM_d, O_BM_d, r_d, L_d, e_d, Rz_d, term_d, prom_d, hp5_d, s_d, us_d, ds_d, cds_d, rflap_d, cp_d, n_d, c_d, d_d]:
+            for key, value in part_d.items():
+                seq_to_partID_d[rc_seq(value[0], spec_out='rc')[1:-1]] = key
+
+        #print(seq_to_partID_d)
+
         i_th = ''
         o_th = ''
         i_bm = ''
@@ -2036,56 +2127,32 @@ class RSD_sim:
                              cp_S + n_S + cds_S + rflap_S +\
                              term_S
 
-                features = [
-                    {"hp5": hp5_S},
-                    {"d": d_S},
-                    {"r": r_S},
-                    {"e": eo_S},
-                    {"o_bm": o_bm_S},
-                    {"c": c_S},
-                    {"th": o_th_Sp},
-                    {"e" : ei_S},
-                    {"i_bm": i_bm_S},
-                    {"l": l_S},
-                    {"cl": cl},
-                    {"rz": rz_S},
-                    {"s": s_S},
-                    {"th": i_th_S},
-                    {"i_bm": i_bm_Sp},
-                    {"e": ei_Sp},
-                    {"th": o_th_S},
-                    {"cp": cp_S},
-                    {"n": n_S},
-                    {"cds": cds_S},
-                    {"rflap": rflap_S},
-                    {"term": term_S}
+                rna_features = [
+                    {"hp5": [hp5_S]},
+                    {"d": [d_S]},
+                    {"r": [r_S]},
+                    {"e": [eo_S]},
+                    {"o_bm": [o_bm_S]},
+                    {"c": [c_S]},
+                    {"th": [o_th_Sp]},
+                    {"e" : [ei_S]},
+                    {"i_bm": [i_bm_S]},
+                    {"l": [l_S]},
+                    {"cl": [cl]},
+                    {"rz": [rz_S]},
+                    {"s": [s_S]},
+                    {"th": [i_th_S]},
+                    {"i_bm": [i_bm_Sp]},
+                    {"e": [ei_Sp]},
+                    {"th": [o_th_S]},
+                    {"cp": [cp_S]},
+                    {"n": [n_S]},
+                    {"cds": [cds_S]},
+                    {"rflap": [rflap_S]},
+                    {"term": [term_S]}
                 ]
 
-                start = 1
-                annotations = []
-                for idx, feature_map in enumerate(features):
-                    for feature_name, feature_value in feature_map.items():
-
-                        if feature_value and feature_value != "|":
-                            annotations.append({
-                                "name": "misc_feature",
-                                "start": start,
-                                "end": start + len(feature_value) - 1,
-                                "qualifiers": {"label": feature_name}
-                            })
-                            start = start + len(feature_value)
-
-
-                
-                
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
-
-                write_genbank_rna(
-                    template[1].replace("|", ""), 
-                    FILEPATH_OUTPUTS, 
-                    name.replace("{", "_").replace("}", "_").replace(",", "_"), 
-                    annotations
-                )
                 
             elif invert == 1:
                     
@@ -2095,6 +2162,32 @@ class RSD_sim:
                              l_S + cl + rz_S + invL +\
                              d_S + r_S + eo_S + o_bm_S + c_S + o_th_Sp + ei_S + i_bm_S +\
                              term_S
+
+                rna_features = [
+                    {"hp5": [hp5_S]},
+                    {"s": [s_S]},
+                    {"th": [i_th_S]},
+                    {"i_bm": [i_bm_Sp]},
+                    {"e": [ei_Sp]},
+                    {"th": [o_th_S]},
+                    {"cp": [cp_S]},
+                    {"n": [n_S]},
+                    {"cds": [cds_S]},
+                    {"rflap": [rflap_S]},
+                    {"l": [l_S]},
+                    {"cl": [cl]},
+                    {"rz": [rz_S]},
+                    {"invL": [invL]},
+                    {"d": [d_S]},
+                    {"r": [r_S]},
+                    {"e": [eo_S]},
+                    {"o_bm": [o_bm_S]},
+                    {"c": [c_S]},
+                    {"th": [o_th_Sp]},
+                    {"e" : [ei_S]},
+                    {"i_bm": [i_bm_S]},
+                    {"term": [term_S]}
+                ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
 
@@ -2180,6 +2273,23 @@ class RSD_sim:
                              d_S + r_S + eo_S + o_bm_S + o_th_Sp + s_Sp + ei_S + i_bm_S +\
                              l_S + cl + rz_S +\
                              rflap_S + term_S
+
+                rna_features = [
+                    {"hp5": [hp5_S]},
+                    {"d": [d_S]},
+                    {"r": [r_S]},
+                    {"e": [eo_S]},
+                    {"o_bm": [o_bm_S]},
+                    {"th": [o_th_Sp]},
+                    {"s": [s_Sp]},
+                    {"e" : [ei_S]},
+                    {"i_bm": [i_bm_S]},
+                    {"l": [l_S]},
+                    {"cl": [cl]},
+                    {"rz": [rz_S]},
+                    {"rflap": [rflap_S]},
+                    {"term": [term_S]}
+                ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                 
@@ -2189,6 +2299,24 @@ class RSD_sim:
                              l_S + cl + rz_S + invL +\
                              d_S + r_S + eo_S + o_bm_S + o_th_Sp + s_Sp + ei_S + i_bm_S +\
                              rflap_S + term_S
+
+                rna_features = [
+                    {"hp5": [hp5_S]},
+                    {"l": [l_S]},
+                    {"cl": [cl]},
+                    {"rz": [rz_S]},
+                    {"invL": [invL]},
+                    {"d": [d_S]},
+                    {"r": [r_S]},
+                    {"e": [eo_S]},
+                    {"o_bm": [o_bm_S]},
+                    {"th": [o_th_Sp]},
+                    {"s": [s_Sp]},
+                    {"e" : [ei_S]},
+                    {"i_bm": [i_bm_S]},
+                    {"rflap": [rflap_S]},
+                    {"term": [term_S]}
+                ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                 
@@ -2232,6 +2360,18 @@ class RSD_sim:
             ###################################################################
             
             ctRSD_part = hp5_S + d_S + r_S + eo_S + o_bm_S + o_th_Sp + s_Sp + rflap_S + term_S
+
+            rna_features = [
+                {"hp5": [hp5_S]},
+                {"d": [d_S]},
+                {"r": [r_S]},
+                {"e": [eo_S]},
+                {"o_bm": [o_bm_S]},
+                {"th": [o_th_Sp]},
+                {"s": [s_Sp]},
+                {"rflap": [rflap_S]},
+                {"term": [term_S]}
+            ]
             
             template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
             
@@ -2286,6 +2426,29 @@ class RSD_sim:
                              s_S + i_th_S + i_bm_Sp + ei_Sp + rc_seq(r_S)[1:-1] +\
                              d_Sp + cp_S + n_S + cds_S + rflap_S +\
                              term_S
+
+                rna_features = [
+                    {"hp5": [hp5_S]},
+                    {"d": [d_S]},
+                    {"c": [c_S]},
+                    {"r": [r_S]},
+                    {"e": [ei_S]},
+                    {"i_bm": [i_bm_S]},
+                    {"l": [l_S]},
+                    {"cl": [cl]},
+                    {"rz": [rz_S]},
+                    {"s": [s_S]},
+                    {"th": [i_th_S]},
+                    {"i_bm": [i_bm_Sp]},
+                    {"e": [ei_Sp]},
+                    {"rc_r": [rc_seq(r_S)[1:-1]]},
+                    {"d": [d_Sp]},
+                    {"cp": [cp_S]},
+                    {"n": [n_S]},
+                    {"cds": [cds_S]},
+                    {"rflap": [rflap_S]},
+                    {"term": [term_S]}
+                ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                 
@@ -2297,6 +2460,29 @@ class RSD_sim:
                              l_S + cl + rz_S + invL +\
                              d_S + c_S + r_S + ei_S + i_bm_S +\
                              term_S
+
+                rna_features = [
+                    {"hp5": [hp5_S]},
+                    {"s": [s_S]},
+                    {"th": [i_th_S]},
+                    {"i_bm": [i_bm_Sp]},
+                    {"rc_r": [rc_seq(r_S)[1:-1]]},
+                    {"d": [d_Sp]},
+                    {"cp": [cp_S]},
+                    {"n": [n_S]},
+                    {"cds": [cds_S]},
+                    {"rflap": [rflap_S]},
+                    {"l": [l_S]},
+                    {"cl": [cl]},
+                    {"rz": [rz_S]},
+                    {"invL": [invL]},
+                    {"d": [d_S]},
+                    {"c": [c_S]},
+                    {"r": [r_S]},
+                    {"e": [ei_S]},
+                    {"i_bm": [i_bm_S]},
+                    {"term": [term_S]}
+                ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                 
@@ -2363,6 +2549,15 @@ class RSD_sim:
             ###################################################################
             
             ctRSD_part = hp5_S + o_th_Sp + eo_S + o_bm_S + rflap_S + term_S
+
+            rna_features = [
+                {"hp5": [hp5_S]},
+                {"th": [o_th_Sp]},
+                {"e": [eo_S]},
+                {"o_bm": [o_bm_S]},
+                {"rflap": [rflap_S]},
+                {"term": [term_S]}
+            ]
             
             template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
 
@@ -2605,6 +2800,37 @@ class RSD_sim:
                                  s_S + i_th_S1 + i_bm_Sp1 + ei_Sp + i_th_S2 + i_bm_Sp2 + ei_Sp + o_th_S +\
                                  cp_S + n_S + cds_S + rflap_S +\
                                  term_S
+
+                    rna_features = [
+                        {"hp5": [hp5_S]},
+                        {"e": [eo_S]},
+                        {"r": [r_S]},
+                        {"o_bm": [o_bm_S]},
+                        {"c": [c_S]},
+                        {"th": [o_th_Sp]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S2]},
+                        {"agl": [agl_S]},
+                        {"th": [i_th_Sp2[-1]]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S1]},
+                        {"l": [l_S]},
+                        {"cl": [cl]},
+                        {"rz": [rz_S]},
+                        {"s": [s_S]},
+                        {"th": [i_th_S1]},
+                        {"i_bm": [i_bm_Sp1]},
+                        {"e" : [ei_Sp]},
+                        {"th": [i_th_S2]},
+                        {"i_bm": [i_bm_Sp2]},
+                        {"e" : [ei_Sp]},
+                        {"th": [o_th_S]},
+                        {"cp": [cp_S]},
+                        {"n": [n_S]},
+                        {"cds": [cds_S]},
+                        {"rflap": [rflap_S]},
+                        {"term": [term_S]}
+                    ]
                     
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                     
@@ -2616,6 +2842,36 @@ class RSD_sim:
                                  s_S + i_th_S1 + i_bm_Sp1 + ei_Sp + i_th_S2 + i_bm_Sp2 + ei_Sp + o_th_S +\
                                  cp_S + n_S + cds_S + rflap_S +\
                                  term_S
+
+                    rna_features = [
+                        {"hp5": [hp5_S]},
+                        {"e": [eo_S]},
+                        {"r": [r_S]},
+                        {"o_bm": [o_bm_S]},
+                        {"c": [c_S]},
+                        {"th": [o_th_Sp]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S2]},
+                        {"agl": [agl_S]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S1]},
+                        {"l": [l_S]},
+                        {"cl": [cl]},
+                        {"rz": [rz_S]},
+                        {"s": [s_S]},
+                        {"th": [i_th_S1]},
+                        {"i_bm": [i_bm_Sp1]},
+                        {"e" : [ei_Sp]},
+                        {"th": [i_th_S2]},
+                        {"i_bm": [i_bm_Sp2]},
+                        {"e" : [ei_Sp]},
+                        {"th": [o_th_S]},
+                        {"cp": [cp_S]},
+                        {"n": [n_S]},
+                        {"cds": [cds_S]},
+                        {"rflap": [rflap_S]},
+                        {"term": [term_S]}
+                    ]
                     
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                         
@@ -2629,6 +2885,38 @@ class RSD_sim:
                                  l_S + cl + rz_S + invL +\
                                  eo_S + r_S + o_bm_S + c_S + o_th_Sp + ei_S + i_bm_S2 + agl_S + i_th_Sp2[-1] + ei_S + i_bm_S1 +\
                                  term_S
+
+                    rna_features = [
+                        {"hp5": [hp5_S]},
+                        {"s": [s_S]},
+                        {"th": [i_th_S1]},
+                        {"i_bm": [i_bm_Sp1]},
+                        {"e" : [ei_Sp]},
+                        {"th": [i_th_S2]},
+                        {"i_bm": [i_bm_Sp2]},
+                        {"e" : [ei_Sp]},
+                        {"th": [o_th_S]},
+                        {"cp": [cp_S]},
+                        {"n": [n_S]},
+                        {"cds": [cds_S]},
+                        {"rflap": [rflap_S]},
+                        {"l": [l_S]},
+                        {"cl": [cl]},
+                        {"rz": [rz_S]},
+                        {"invL": [invL]},
+                        {"e": [eo_S]},
+                        {"r": [r_S]},
+                        {"o_bm": [o_bm_S]},
+                        {"c": [c_S]},
+                        {"th": [o_th_Sp]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S2]},
+                        {"agl": [agl_S]},
+                        {"th": [i_th_Sp2[-1]]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S1]},
+                        {"term": [term_S]}
+                    ]
                     
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                         
@@ -2640,7 +2928,37 @@ class RSD_sim:
                                  l_S + cl + rz_S + invL +\
                                  eo_S + r_S + o_bm_S + c_S + o_th_Sp + ei_S + i_bm_S2 + agl_S + ei_S + i_bm_S1 +\
                                  term_S
-                    
+
+                    rna_features = [
+                        {"hp5": [hp5_S]},
+                        {"s": [s_S]},
+                        {"th": [i_th_S1]},
+                        {"i_bm": [i_bm_Sp1]},
+                        {"e" : [ei_Sp]},
+                        {"th": [i_th_S2]},
+                        {"i_bm": [i_bm_Sp2]},
+                        {"e" : [ei_Sp]},
+                        {"th": [o_th_S]},
+                        {"cp": [cp_S]},
+                        {"n": [n_S]},
+                        {"cds": [cds_S]},
+                        {"rflap": [rflap_S]},
+                        {"l": [l_S]},
+                        {"cl": [cl]},
+                        {"rz": [rz_S]},
+                        {"invL": [invL]},
+                        {"e": [eo_S]},
+                        {"r": [r_S]},
+                        {"o_bm": [o_bm_S]},
+                        {"c": [c_S]},
+                        {"th": [o_th_Sp]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S2]},
+                        {"agl": [agl_S]},
+                        {"e" : [ei_S]},
+                        {"i_bm": [i_bm_S1]},
+                        {"term": [term_S]}
+                    ]
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                
                 
@@ -2774,14 +3092,66 @@ class RSD_sim:
                          s_S + i2_th_S + I2_bm_Sp + cL_Sp + I1_bm_S + \
                          cp_S + n_S + cds_S + rflap_S +\
                          term_S
+
+            rna_features = [
+                {"hp5": [hp5_S]},
+                {"s": [s_S]},
+                {"th": [i1_th_S]},
+                {"c": [c_S]},
+                {"i1_bm": [I1_bm_Sp]},
+                {"cL": [cL_S]},
+                {"i2_bm": [I2_bm_S]},
+                {"l": [l_S]},
+                {"cl": [cl]},
+                {"rz": [rz_S]},
+                {"s": [s_S]},
+                {"th": [i2_th_S]},
+                {"i2_bm": [I2_bm_Sp]},
+                {"cL": [cL_Sp]},
+                {"i1_bm": [I1_bm_S]},
+                {"cp": [cp_S]},
+                {"n": [n_S]},
+                {"cds": [cds_S]},
+                {"rflap": [rflap_S]},
+                {"term": [term_S]}
+            ]
             
             template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                            
         else:
             print('Incorrect Nomenclature')
-            
+
+
+        dna_features = [{"us": [us_S, str(us)]}, {"prom": [prom_S, str(prom)]}] + rna_features + [{"ds": [ds_S, str(ds)]}]
+        rna_annotations = build_annotations(rna_features, seq_to_partID_d)
+        dna_annotations = build_annotations(dna_features, seq_to_partID_d)
+
+        genbank_dna = write_genbank_text(
+            template[0].replace("|", ""),  
+            name.replace("{", "_").replace("}", "_").replace(",", "_"), 
+            dna_annotations,
+            rna=False
+        )
+
+        genbank_rna = write_genbank_text(
+            template[1].replace("|", ""), 
+            name.replace("{", "_").replace("}", "_").replace(",", "_"), 
+            rna_annotations,
+            rna=True
+        )
+
+        dna_part_IDs = [part['qualifiers']['note'] for part in dna_annotations]
+        rna_part_IDs = [part['qualifiers']['note'] for part in rna_annotations]
+
         
-        return(template) 
+        return(
+            template[0], 
+            template[1], 
+            dna_part_IDs,
+            rna_part_IDs,
+            genbank_dna, 
+            genbank_rna
+        )
 
 
 
