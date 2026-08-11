@@ -462,7 +462,7 @@ def domain_seq_selection(name,inps,outps,fuels,dashcheckInps,dashcheckOuts,Echec
     
     return [ei_S,ei_Sp,eo_S,r_S,d_S,s_S,s_Sp,cp_S,n_S,c_S,cds_S,rflap_S,o_bm_S,o_th_Sp,i_bm_S,i_th_S,i_bm_Sp,o_th_S,hp5_S,l_S,rz_S,term_S,prom_S,cl,us_S,ds_S]
 
-def build_annotations(features, seq_to_partID_d, temp_len=0):
+def build_annotations(features, domain_to_seq_to_partID_d, temp_len=0):
     annotations = []
     start = 1
     for feature_map in features:
@@ -473,19 +473,19 @@ def build_annotations(features, seq_to_partID_d, temp_len=0):
 
 
             part_id = ""
-            if part_seq in seq_to_partID_d:
-                part_id = seq_to_partID_d[part_seq]
+            if not part_seq or part_seq == "|":
+                continue # Skip if part_seq is empty or cleavage site indicator
+            elif part_seq in domain_to_seq_to_partID_d[part_type]:
+                part_id = domain_to_seq_to_partID_d[part_type][part_seq]
                 part_orientation = "forward"
-            elif rc_seq(part_seq, spec_out='rc') in seq_to_partID_d:
-                part_id = seq_to_partID_d[rc_seq(part_seq, spec_out='rc', rna=0)[1:-1]]
+            elif rc_seq(part_seq, spec_out='rc')[1:-1] in domain_to_seq_to_partID_d[part_type]:
+                part_id = domain_to_seq_to_partID_d[part_type][rc_seq(part_seq, spec_out='rc', rna=0)[1:-1]]
                 part_orientation = "reverse"
             elif len(feature_value) > 1:
                 part_id = feature_value[1]
                 part_orientation = "forward" # default orientation if not specified
-            elif part_seq == "|":
-                continue  # Skip adding an annotation for the cleavage site
             else:
-                raise ValueError(f"Sequence '{part_seq}' not found in domains excel dictionary.")
+                raise ValueError(f"Sequence '{part_seq}' not found in '{part_type}', {domain_to_seq_to_partID_d[part_type]} excel dictionary.")
 
             if part_seq and part_seq != "|":
                 end = start + part_len - 1 if temp_len == 0 else min(start + part_len - 1, temp_len)
@@ -617,6 +617,15 @@ def write_genbank_text(sequence, locus_name="ctRSD_sequence", annotations=None, 
     genbank_text_list.append("//\n")
 
     return "".join(genbank_text_list)
+
+def domain_dict_to_seq_dict(domain_dict):
+    return {
+        # Reverse Complement sequences
+        **{rc_seq(value[0], spec_out='rc')[1:-1]: key + "_rc" for key, value in domain_dict.items()},
+
+        # Forward sequences (overrides any duplicates with the same sequence)
+        **{value[0]: key for key, value in domain_dict.items()}
+    }
 
 
 '''
@@ -1950,23 +1959,56 @@ class RSD_sim:
         c_d = xlsheet_to_dict(filepath, 'c', 1) # clamp adjacent to toehold, complementary to cp
         d_d = xlsheet_to_dict(filepath, 'd', 1) # distal domain for translation
 
+        domain_to_name_d = {
+            "th": "toehold",
+            "i_bm": "inputBranchMigration",
+            "o_bm": "outputBranchMigration",
+            "r": "outputReportingDomain",
+            "l": "linker",
+            "e": "extendedBranchMigration",
+            "rz": "ribozyme",
+            "term": "terminator",
+            "prom": "promoter",
+            "hp5": "hp5",
+            "s": "spacer",
+            "us": "us",
+            "ds": "ds",
+            "cds": "cds",
+            "rflap": "rflap",
+            "cp": "clampDomainPrime",
+            "n": "nTerminalLinker",
+            "c": "clampDomain",
+            "d": "distalDomain",
+            "cl": "cleavageSite"
+        }
+
+        domain_to_seq_to_partID_d = {
+            domain_to_name_d["th"]: domain_dict_to_seq_dict(th_d),
+            domain_to_name_d["i_bm"]: domain_dict_to_seq_dict(I_BM_d),
+            domain_to_name_d["o_bm"]: domain_dict_to_seq_dict(O_BM_d),
+            domain_to_name_d["r"]: domain_dict_to_seq_dict(r_d),
+            domain_to_name_d["l"]: domain_dict_to_seq_dict(L_d),
+            domain_to_name_d["e"]: domain_dict_to_seq_dict(e_d),
+            domain_to_name_d["rz"]: domain_dict_to_seq_dict(Rz_d),
+            domain_to_name_d["term"]: domain_dict_to_seq_dict(term_d),
+            domain_to_name_d["prom"]: domain_dict_to_seq_dict(prom_d),
+            domain_to_name_d["hp5"]: domain_dict_to_seq_dict(hp5_d),
+            domain_to_name_d["s"]: domain_dict_to_seq_dict(s_d),
+            domain_to_name_d["us"]: domain_dict_to_seq_dict(us_d),
+            domain_to_name_d["ds"]: domain_dict_to_seq_dict(ds_d),
+            domain_to_name_d["cds"]: domain_dict_to_seq_dict(cds_d),
+            domain_to_name_d["rflap"]: domain_dict_to_seq_dict(rflap_d),
+            domain_to_name_d["cp"]: domain_dict_to_seq_dict(cp_d),
+            domain_to_name_d["n"]: domain_dict_to_seq_dict(n_d),
+            domain_to_name_d["c"]: domain_dict_to_seq_dict(c_d),
+            domain_to_name_d["d"]: domain_dict_to_seq_dict(d_d)
+        }
+
 
         
         # converting into th' as code was originally written to handle that
         for m in th_d.keys():
             th_d[m] = [rc_seq(th_d[m][0])[1:-1]]
-
-        # Seq to Part ID Dictionary
-        seq_to_partID_d = {}
-        for part_d in [th_d, I_BM_d, O_BM_d, r_d, L_d, e_d, Rz_d, term_d, prom_d, hp5_d, s_d, us_d, ds_d, cds_d, rflap_d, cp_d, n_d, c_d, d_d]:
-            for key, value in part_d.items():
-                seq_to_partID_d[value[0]] = key
-
-        for part_d in [th_d, I_BM_d, O_BM_d, r_d, L_d, e_d, Rz_d, term_d, prom_d, hp5_d, s_d, us_d, ds_d, cds_d, rflap_d, cp_d, n_d, c_d, d_d]:
-            for key, value in part_d.items():
-                seq_to_partID_d[rc_seq(value[0], spec_out='rc')[1:-1]] = key
-
-        #print(seq_to_partID_d)
 
         i_th = ''
         o_th = ''
@@ -2129,28 +2171,28 @@ class RSD_sim:
                              term_S
 
                 rna_features = [
-                    {"hp5": [hp5_S]},
-                    {"d": [d_S]},
-                    {"r": [r_S]},
-                    {"e": [eo_S]},
-                    {"o_bm": [o_bm_S]},
-                    {"c": [c_S]},
-                    {"th": [o_th_Sp]},
-                    {"e" : [ei_S]},
-                    {"i_bm": [i_bm_S]},
-                    {"l": [l_S]},
-                    {"cl": [cl]},
-                    {"rz": [rz_S]},
-                    {"s": [s_S]},
-                    {"th": [i_th_S]},
-                    {"i_bm": [i_bm_Sp]},
-                    {"e": [ei_Sp]},
-                    {"th": [o_th_S]},
-                    {"cp": [cp_S]},
-                    {"n": [n_S]},
-                    {"cds": [cds_S]},
-                    {"rflap": [rflap_S]},
-                    {"term": [term_S]}
+                    {domain_to_name_d["hp5"]: [hp5_S]},
+                    {domain_to_name_d["d"]: [d_S]},
+                    {domain_to_name_d["r"]: [r_S]},
+                    {domain_to_name_d["e"]: [eo_S]},
+                    {domain_to_name_d["o_bm"]: [o_bm_S]},
+                    {domain_to_name_d["c"]: [c_S]},
+                    {domain_to_name_d["th"]: [o_th_Sp]},
+                    {domain_to_name_d["e"] : [ei_S]},
+                    {domain_to_name_d["i_bm"]: [i_bm_S]},
+                    {domain_to_name_d["l"]: [l_S]},
+                    {domain_to_name_d["cl"]: [cl]},
+                    {domain_to_name_d["rz"]: [rz_S]},
+                    {domain_to_name_d["s"]: [s_S]},
+                    {domain_to_name_d["th"]: [i_th_S]},
+                    {domain_to_name_d["o_bm"]: [i_bm_Sp]},
+                    {domain_to_name_d["e"]: [ei_Sp]},
+                    {domain_to_name_d["th"]: [o_th_S]},
+                    {domain_to_name_d["cp"]: [cp_S]},
+                    {domain_to_name_d["n"]: [n_S]},
+                    {domain_to_name_d["cds"]: [cds_S]},
+                    {domain_to_name_d["rflap"]: [rflap_S]},
+                    {domain_to_name_d["term"]: [term_S]}
                 ]
 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2165,29 +2207,29 @@ class RSD_sim:
                              term_S
 
                 rna_features = [
-                    {"hp5": [hp5_S]},
-                    {"s": [s_S]},
-                    {"th": [i_th_S]},
-                    {"i_bm": [i_bm_Sp]},
-                    {"e": [ei_Sp]},
-                    {"th": [o_th_S]},
-                    {"cp": [cp_S]},
-                    {"n": [n_S]},
-                    {"cds": [cds_S]},
-                    {"rflap": [rflap_S]},
-                    {"l": [l_S]},
-                    {"cl": [cl]},
-                    {"rz": [rz_S]},
-                    {"invL": [invL]},
-                    {"d": [d_S]},
-                    {"r": [r_S]},
-                    {"e": [eo_S]},
-                    {"o_bm": [o_bm_S]},
-                    {"c": [c_S]},
-                    {"th": [o_th_Sp]},
-                    {"e" : [ei_S]},
-                    {"i_bm": [i_bm_S]},
-                    {"term": [term_S]}
+                    {domain_to_name_d["hp5"]: [hp5_S]},
+                    {domain_to_name_d["s"]: [s_S]},
+                    {domain_to_name_d["th"]: [i_th_S]},
+                    {domain_to_name_d["o_bm"]: [i_bm_Sp]},
+                    {domain_to_name_d["e"]: [ei_Sp]},
+                    {domain_to_name_d["th"]: [o_th_S]},
+                    {domain_to_name_d["cp"]: [cp_S]},
+                    {domain_to_name_d["n"]: [n_S]},
+                    {domain_to_name_d["cds"]: [cds_S]},
+                    {domain_to_name_d["rflap"]: [rflap_S]},
+                    {domain_to_name_d["l"]: [l_S]},
+                    {domain_to_name_d["cl"]: [cl]},
+                    {domain_to_name_d["rz"]: [rz_S]},
+                    {domain_to_name_d["l"]: [invL]},
+                    {domain_to_name_d["d"]: [d_S]},
+                    {domain_to_name_d["r"]: [r_S]},
+                    {domain_to_name_d["e"]: [eo_S]},
+                    {domain_to_name_d["o_bm"]: [o_bm_S]},
+                    {domain_to_name_d["c"]: [c_S]},
+                    {domain_to_name_d["th"]: [o_th_Sp]},
+                    {domain_to_name_d["e"]: [ei_S]},
+                    {domain_to_name_d["i_bm"]: [i_bm_S]},
+                    {domain_to_name_d["term"]: [term_S]}
                 ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2276,20 +2318,20 @@ class RSD_sim:
                              rflap_S + term_S
 
                 rna_features = [
-                    {"hp5": [hp5_S]},
-                    {"d": [d_S]},
-                    {"r": [r_S]},
-                    {"e": [eo_S]},
-                    {"o_bm": [o_bm_S]},
-                    {"th": [o_th_Sp]},
-                    {"s": [s_Sp]},
-                    {"e" : [ei_S]},
-                    {"i_bm": [i_bm_S]},
-                    {"l": [l_S]},
-                    {"cl": [cl]},
-                    {"rz": [rz_S]},
-                    {"rflap": [rflap_S]},
-                    {"term": [term_S]}
+                    {domain_to_name_d["hp5"]: [hp5_S]},
+                    {domain_to_name_d["d"]: [d_S]},
+                    {domain_to_name_d["r"]: [r_S]},
+                    {domain_to_name_d["e"]: [eo_S]},
+                    {domain_to_name_d["o_bm"]: [o_bm_S]},
+                    {domain_to_name_d["th"]: [o_th_Sp]},
+                    {domain_to_name_d["s"]: [s_Sp]},
+                    {domain_to_name_d["e"]: [ei_S]},
+                    {domain_to_name_d["i_bm"]: [i_bm_S]},
+                    {domain_to_name_d["l"]: [l_S]},
+                    {domain_to_name_d["cl"]: [cl]},
+                    {domain_to_name_d["rz"]: [rz_S]},
+                    {domain_to_name_d["rflap"]: [rflap_S]},
+                    {domain_to_name_d["term"]: [term_S]}
                 ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2302,21 +2344,21 @@ class RSD_sim:
                              rflap_S + term_S
 
                 rna_features = [
-                    {"hp5": [hp5_S]},
-                    {"l": [l_S]},
-                    {"cl": [cl]},
-                    {"rz": [rz_S]},
-                    {"invL": [invL]},
-                    {"d": [d_S]},
-                    {"r": [r_S]},
-                    {"e": [eo_S]},
-                    {"o_bm": [o_bm_S]},
-                    {"th": [o_th_Sp]},
-                    {"s": [s_Sp]},
-                    {"e" : [ei_S]},
-                    {"i_bm": [i_bm_S]},
-                    {"rflap": [rflap_S]},
-                    {"term": [term_S]}
+                    {domain_to_name_d["hp5"]: [hp5_S]},
+                    {domain_to_name_d["l"]: [l_S]},
+                    {domain_to_name_d["cl"]: [cl]},
+                    {domain_to_name_d["rz"]: [rz_S]},
+                    {domain_to_name_d["l"]: [invL]},
+                    {domain_to_name_d["d"]: [d_S]},
+                    {domain_to_name_d["r"]: [r_S]},
+                    {domain_to_name_d["e"]: [eo_S]},
+                    {domain_to_name_d["o_bm"]: [o_bm_S]},
+                    {domain_to_name_d["th"]: [o_th_Sp]},
+                    {domain_to_name_d["s"]: [s_Sp]},
+                    {domain_to_name_d["e"]: [ei_S]},
+                    {domain_to_name_d["i_bm"]: [i_bm_S]},
+                    {domain_to_name_d["rflap"]: [rflap_S]},
+                    {domain_to_name_d["term"]: [term_S]}
                 ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2363,15 +2405,15 @@ class RSD_sim:
             ctRSD_part = hp5_S + d_S + r_S + eo_S + o_bm_S + o_th_Sp + s_Sp + rflap_S + term_S
 
             rna_features = [
-                {"hp5": [hp5_S]},
-                {"d": [d_S]},
-                {"r": [r_S]},
-                {"e": [eo_S]},
-                {"o_bm": [o_bm_S]},
-                {"th": [o_th_Sp]},
-                {"s": [s_Sp]},
-                {"rflap": [rflap_S]},
-                {"term": [term_S]}
+                {domain_to_name_d["hp5"]: [hp5_S]},
+                {domain_to_name_d["d"]: [d_S]},
+                {domain_to_name_d["r"]: [r_S]},
+                {domain_to_name_d["e"]: [eo_S]},
+                {domain_to_name_d["o_bm"]: [o_bm_S]},
+                {domain_to_name_d["th"]: [o_th_Sp]},
+                {domain_to_name_d["s"]: [s_Sp]},
+                {domain_to_name_d["rflap"]: [rflap_S]},
+                {domain_to_name_d["term"]: [term_S]}
             ]
             
             template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2429,26 +2471,26 @@ class RSD_sim:
                              term_S
 
                 rna_features = [
-                    {"hp5": [hp5_S]},
-                    {"d": [d_S]},
-                    {"c": [c_S]},
-                    {"r": [r_S]},
-                    {"e": [ei_S]},
-                    {"i_bm": [i_bm_S]},
-                    {"l": [l_S]},
-                    {"cl": [cl]},
-                    {"rz": [rz_S]},
-                    {"s": [s_S]},
-                    {"th": [i_th_S]},
-                    {"i_bm": [i_bm_Sp]},
-                    {"e": [ei_Sp]},
-                    {"rc_r": [rc_seq(r_S)[1:-1]]},
-                    {"d": [d_Sp]},
-                    {"cp": [cp_S]},
-                    {"n": [n_S]},
-                    {"cds": [cds_S]},
-                    {"rflap": [rflap_S]},
-                    {"term": [term_S]}
+                    {domain_to_name_d["hp5"]: [hp5_S]},
+                    {domain_to_name_d["d"]: [d_S]},
+                    {domain_to_name_d["c"]: [c_S]},
+                    {domain_to_name_d["r"]: [r_S]},
+                    {domain_to_name_d["e"]: [ei_S]},
+                    {domain_to_name_d["i_bm"]: [i_bm_S]},
+                    {domain_to_name_d["l"]: [l_S]},
+                    {domain_to_name_d["cl"]: [cl]},
+                    {domain_to_name_d["rz"]: [rz_S]},
+                    {domain_to_name_d["s"]: [s_S]},
+                    {domain_to_name_d["th"]: [i_th_S]},
+                    {domain_to_name_d["o_bm"]: [i_bm_Sp]},
+                    {domain_to_name_d["e"]: [ei_Sp]},
+                    {domain_to_name_d["r"]: [rc_seq(r_S)[1:-1]]},
+                    {domain_to_name_d["d"]: [d_Sp]},
+                    {domain_to_name_d["cp"]: [cp_S]},
+                    {domain_to_name_d["n"]: [n_S]},
+                    {domain_to_name_d["cds"]: [cds_S]},
+                    {domain_to_name_d["rflap"]: [rflap_S]},
+                    {domain_to_name_d["term"]: [term_S]}
                 ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2463,26 +2505,26 @@ class RSD_sim:
                              term_S
 
                 rna_features = [
-                    {"hp5": [hp5_S]},
-                    {"s": [s_S]},
-                    {"th": [i_th_S]},
-                    {"i_bm": [i_bm_Sp]},
-                    {"rc_r": [rc_seq(r_S)[1:-1]]},
-                    {"d": [d_Sp]},
-                    {"cp": [cp_S]},
-                    {"n": [n_S]},
-                    {"cds": [cds_S]},
-                    {"rflap": [rflap_S]},
-                    {"l": [l_S]},
-                    {"cl": [cl]},
-                    {"rz": [rz_S]},
-                    {"invL": [invL]},
-                    {"d": [d_S]},
-                    {"c": [c_S]},
-                    {"r": [r_S]},
-                    {"e": [ei_S]},
-                    {"i_bm": [i_bm_S]},
-                    {"term": [term_S]}
+                    {domain_to_name_d["hp5"]: [hp5_S]},
+                    {domain_to_name_d["s"]: [s_S]},
+                    {domain_to_name_d["th"]: [i_th_S]},
+                    {domain_to_name_d["o_bm"]: [i_bm_Sp]},
+                    {domain_to_name_d["rc_r"]: [rc_seq(r_S)[1:-1]]},
+                    {domain_to_name_d["d"]: [d_Sp]},
+                    {domain_to_name_d["cp"]: [cp_S]},
+                    {domain_to_name_d["n"]: [n_S]},
+                    {domain_to_name_d["cds"]: [cds_S]},
+                    {domain_to_name_d["rflap"]: [rflap_S]},
+                    {domain_to_name_d["l"]: [l_S]},
+                    {domain_to_name_d["cl"]: [cl]},
+                    {domain_to_name_d["rz"]: [rz_S]},
+                    {domain_to_name_d["l"]: [invL]},
+                    {domain_to_name_d["d"]: [d_S]},
+                    {domain_to_name_d["c"]: [c_S]},
+                    {domain_to_name_d["r"]: [r_S]},
+                    {domain_to_name_d["e"]: [ei_S]},
+                    {domain_to_name_d["i_bm"]: [i_bm_S]},
+                    {domain_to_name_d["term"]: [term_S]}
                 ]
                 
                 template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2803,34 +2845,34 @@ class RSD_sim:
                                  term_S
 
                     rna_features = [
-                        {"hp5": [hp5_S]},
-                        {"e": [eo_S]},
-                        {"r": [r_S]},
-                        {"o_bm": [o_bm_S]},
-                        {"c": [c_S]},
-                        {"th": [o_th_Sp]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S2]},
-                        {"agl": [agl_S]},
-                        {"th": [i_th_Sp2[-1]]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S1]},
-                        {"l": [l_S]},
-                        {"cl": [cl]},
-                        {"rz": [rz_S]},
-                        {"s": [s_S]},
-                        {"th": [i_th_S1]},
-                        {"i_bm": [i_bm_Sp1]},
-                        {"e" : [ei_Sp]},
-                        {"th": [i_th_S2]},
-                        {"i_bm": [i_bm_Sp2]},
-                        {"e" : [ei_Sp]},
-                        {"th": [o_th_S]},
-                        {"cp": [cp_S]},
-                        {"n": [n_S]},
-                        {"cds": [cds_S]},
-                        {"rflap": [rflap_S]},
-                        {"term": [term_S]}
+                        {domain_to_name_d["hp5"]: [hp5_S]},
+                        {domain_to_name_d["e"]: [eo_S]},
+                        {domain_to_name_d["r"]: [r_S]},
+                        {domain_to_name_d["o_bm"]: [o_bm_S]},
+                        {domain_to_name_d["c"]: [c_S]},
+                        {domain_to_name_d["th"]: [o_th_Sp]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S2]},
+                        {domain_to_name_d["agl"]: [agl_S]},
+                        {domain_to_name_d["th"]: [i_th_Sp2[-1]]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S1]},
+                        {domain_to_name_d["l"]: [l_S]},
+                        {domain_to_name_d["cl"]: [cl]},
+                        {domain_to_name_d["rz"]: [rz_S]},
+                        {domain_to_name_d["spacer"]: [s_S]},
+                        {domain_to_name_d["th"]: [i_th_S1]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp1]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [i_th_S2]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp2]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [o_th_S]},
+                        {domain_to_name_d["cp"]: [cp_S]},
+                        {domain_to_name_d["n"]: [n_S]},
+                        {domain_to_name_d["cds"]: [cds_S]},
+                        {domain_to_name_d["rflap"]: [rflap_S]},
+                        {domain_to_name_d["term"]: [term_S]}
                     ]
                     
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2845,33 +2887,33 @@ class RSD_sim:
                                  term_S
 
                     rna_features = [
-                        {"hp5": [hp5_S]},
-                        {"e": [eo_S]},
-                        {"r": [r_S]},
-                        {"o_bm": [o_bm_S]},
-                        {"c": [c_S]},
-                        {"th": [o_th_Sp]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S2]},
-                        {"agl": [agl_S]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S1]},
-                        {"l": [l_S]},
-                        {"cl": [cl]},
-                        {"rz": [rz_S]},
-                        {"s": [s_S]},
-                        {"th": [i_th_S1]},
-                        {"i_bm": [i_bm_Sp1]},
-                        {"e" : [ei_Sp]},
-                        {"th": [i_th_S2]},
-                        {"i_bm": [i_bm_Sp2]},
-                        {"e" : [ei_Sp]},
-                        {"th": [o_th_S]},
-                        {"cp": [cp_S]},
-                        {"n": [n_S]},
-                        {"cds": [cds_S]},
-                        {"rflap": [rflap_S]},
-                        {"term": [term_S]}
+                        {domain_to_name_d["hp5"]: [hp5_S]},
+                        {domain_to_name_d["e"]: [eo_S]},
+                        {domain_to_name_d["r"]: [r_S]},
+                        {domain_to_name_d["o_bm"]: [o_bm_S]},
+                        {domain_to_name_d["c"]: [c_S]},
+                        {domain_to_name_d["th"]: [o_th_Sp]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S2]},
+                        {domain_to_name_d["agl"]: [agl_S]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S1]},
+                        {domain_to_name_d["l"]: [l_S]},
+                        {domain_to_name_d["cl"]: [cl]},
+                        {domain_to_name_d["rz"]: [rz_S]},
+                        {domain_to_name_d["spacer"]: [s_S]},
+                        {domain_to_name_d["th"]: [i_th_S1]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp1]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [i_th_S2]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp2]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [o_th_S]},
+                        {domain_to_name_d["cp"]: [cp_S]},
+                        {domain_to_name_d["n"]: [n_S]},
+                        {domain_to_name_d["cds"]: [cds_S]},
+                        {domain_to_name_d["rflap"]: [rflap_S]},
+                        {domain_to_name_d["term"]: [term_S]}
                     ]
                     
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2888,35 +2930,35 @@ class RSD_sim:
                                  term_S
 
                     rna_features = [
-                        {"hp5": [hp5_S]},
-                        {"s": [s_S]},
-                        {"th": [i_th_S1]},
-                        {"i_bm": [i_bm_Sp1]},
-                        {"e" : [ei_Sp]},
-                        {"th": [i_th_S2]},
-                        {"i_bm": [i_bm_Sp2]},
-                        {"e" : [ei_Sp]},
-                        {"th": [o_th_S]},
-                        {"cp": [cp_S]},
-                        {"n": [n_S]},
-                        {"cds": [cds_S]},
-                        {"rflap": [rflap_S]},
-                        {"l": [l_S]},
-                        {"cl": [cl]},
-                        {"rz": [rz_S]},
-                        {"invL": [invL]},
-                        {"e": [eo_S]},
-                        {"r": [r_S]},
-                        {"o_bm": [o_bm_S]},
-                        {"c": [c_S]},
-                        {"th": [o_th_Sp]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S2]},
-                        {"agl": [agl_S]},
-                        {"th": [i_th_Sp2[-1]]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S1]},
-                        {"term": [term_S]}
+                        {domain_to_name_d["hp5"]: [hp5_S]},
+                        {domain_to_name_d["s"]: [s_S]},
+                        {domain_to_name_d["th"]: [i_th_S1]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp1]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [i_th_S2]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp2]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [o_th_S]},
+                        {domain_to_name_d["cp"]: [cp_S]},
+                        {domain_to_name_d["n"]: [n_S]},
+                        {domain_to_name_d["cds"]: [cds_S]},
+                        {domain_to_name_d["rflap"]: [rflap_S]},
+                        {domain_to_name_d["l"]: [l_S]},
+                        {domain_to_name_d["cl"]: [cl]},
+                        {domain_to_name_d["rz"]: [rz_S]},
+                        {domain_to_name_d["l"]: [invL]},
+                        {domain_to_name_d["e"]: [eo_S]},
+                        {domain_to_name_d["r"]: [r_S]},
+                        {domain_to_name_d["o_bm"]: [o_bm_S]},
+                        {domain_to_name_d["c"]: [c_S]},
+                        {domain_to_name_d["th"]: [o_th_Sp]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S2]},
+                        {domain_to_name_d["agl"]: [agl_S]},
+                        {domain_to_name_d["th"]: [i_th_Sp2[-1]]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S1]},
+                        {domain_to_name_d["term"]: [term_S]}
                     ]
                     
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -2931,34 +2973,34 @@ class RSD_sim:
                                  term_S
 
                     rna_features = [
-                        {"hp5": [hp5_S]},
-                        {"s": [s_S]},
-                        {"th": [i_th_S1]},
-                        {"i_bm": [i_bm_Sp1]},
-                        {"e" : [ei_Sp]},
-                        {"th": [i_th_S2]},
-                        {"i_bm": [i_bm_Sp2]},
-                        {"e" : [ei_Sp]},
-                        {"th": [o_th_S]},
-                        {"cp": [cp_S]},
-                        {"n": [n_S]},
-                        {"cds": [cds_S]},
-                        {"rflap": [rflap_S]},
-                        {"l": [l_S]},
-                        {"cl": [cl]},
-                        {"rz": [rz_S]},
-                        {"invL": [invL]},
-                        {"e": [eo_S]},
-                        {"r": [r_S]},
-                        {"o_bm": [o_bm_S]},
-                        {"c": [c_S]},
-                        {"th": [o_th_Sp]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S2]},
-                        {"agl": [agl_S]},
-                        {"e" : [ei_S]},
-                        {"i_bm": [i_bm_S1]},
-                        {"term": [term_S]}
+                        {domain_to_name_d["hp5"]: [hp5_S]},
+                        {domain_to_name_d["s"]: [s_S]},
+                        {domain_to_name_d["th"]: [i_th_S1]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp1]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [i_th_S2]},
+                        {domain_to_name_d["o_bm"]: [i_bm_Sp2]},
+                        {domain_to_name_d["e"]: [ei_Sp]},
+                        {domain_to_name_d["th"]: [o_th_S]},
+                        {domain_to_name_d["cp"]: [cp_S]},
+                        {domain_to_name_d["n"]: [n_S]},
+                        {domain_to_name_d["cds"]: [cds_S]},
+                        {domain_to_name_d["rflap"]: [rflap_S]},
+                        {domain_to_name_d["l"]: [l_S]},
+                        {domain_to_name_d["cl"]: [cl]},
+                        {domain_to_name_d["rz"]: [rz_S]},
+                        {domain_to_name_d["l"]: [invL]},
+                        {domain_to_name_d["e"]: [eo_S]},
+                        {domain_to_name_d["r"]: [r_S]},
+                        {domain_to_name_d["o_bm"]: [o_bm_S]},
+                        {domain_to_name_d["c"]: [c_S]},
+                        {domain_to_name_d["th"]: [o_th_Sp]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S2]},
+                        {domain_to_name_d["agl"]: [agl_S]},
+                        {domain_to_name_d["e"]: [ei_S]},
+                        {domain_to_name_d["i_bm"]: [i_bm_S1]},
+                        {domain_to_name_d["term"]: [term_S]}
                     ]
                     template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
                
@@ -3095,26 +3137,26 @@ class RSD_sim:
                          term_S
 
             rna_features = [
-                {"hp5": [hp5_S]},
-                {"s": [s_S]},
-                {"th": [i1_th_S]},
-                {"c": [c_S]},
-                {"i1_bm": [I1_bm_Sp]},
-                {"cL": [cL_S]},
-                {"i2_bm": [I2_bm_S]},
-                {"l": [l_S]},
-                {"cl": [cl]},
-                {"rz": [rz_S]},
-                {"s": [s_S]},
-                {"th": [i2_th_S]},
-                {"i2_bm": [I2_bm_Sp]},
-                {"cL": [cL_Sp]},
-                {"i1_bm": [I1_bm_S]},
-                {"cp": [cp_S]},
-                {"n": [n_S]},
-                {"cds": [cds_S]},
-                {"rflap": [rflap_S]},
-                {"term": [term_S]}
+                {domain_to_name_d["hp5"]: [hp5_S]},
+                {domain_to_name_d["s"]: [s_S]},
+                {domain_to_name_d["th"]: [i1_th_S]},
+                {domain_to_name_d["c"]: [c_S]},
+                {domain_to_name_d["o_bm"]: [I1_bm_Sp]},
+                {domain_to_name_d["cL"]: [cL_S]},
+                {domain_to_name_d["i_bm"]: [I2_bm_S]},
+                {domain_to_name_d["l"]: [l_S]},
+                {domain_to_name_d["cl"]: [cl]},
+                {domain_to_name_d["rz"]: [rz_S]},
+                {domain_to_name_d["s"]: [s_S]},
+                {domain_to_name_d["th"]: [i2_th_S]},
+                {domain_to_name_d["o_bm"]: [I2_bm_Sp]},
+                {domain_to_name_d["cL"]: [cL_Sp]},
+                {domain_to_name_d["i_bm"]: [I1_bm_S]},
+                {domain_to_name_d["cp"]: [cp_S]},
+                {domain_to_name_d["n"]: [n_S]},
+                {domain_to_name_d["cds"]: [cds_S]},
+                {domain_to_name_d["rflap"]: [rflap_S]},
+                {domain_to_name_d["term"]: [term_S]}
             ]
             
             template = create_template(ctRSD_part,prom_S,rna,us_S,ds_S,temp_len)
@@ -3123,9 +3165,9 @@ class RSD_sim:
             print('Incorrect Nomenclature')
 
 
-        dna_features = [{"us": [us_S, str(us)]}, {"prom": [prom_S, str(prom)]}] + rna_features + [{"ds": [ds_S, str(ds)]}]
-        rna_annotations = build_annotations(rna_features, seq_to_partID_d)
-        dna_annotations = build_annotations(dna_features, seq_to_partID_d)
+        dna_features = [{"us": [us_S, str(us)]}, {domain_to_name_d["prom"]: [prom_S, str(prom)]}] + rna_features + [{"ds": [ds_S, str(ds)]}]
+        rna_annotations = build_annotations(rna_features, domain_to_seq_to_partID_d)
+        dna_annotations = build_annotations(dna_features, domain_to_seq_to_partID_d)
 
         genbank_dna = write_genbank_text(
             template[0].replace("|", ""),  
