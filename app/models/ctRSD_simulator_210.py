@@ -255,22 +255,6 @@ def rc_seq(seq, spec_out='rc', rna=0):
     return out_seq
 
 
-def get_complement(seq):
-    
-    complement_map = {
-        "A": "T",
-        "T": "A",
-        "G": "C",
-        "C": "G"
-    }
-
-    new_seq = ""
-    for element in seq:
-        new_seq += complement_map[element]
-
-    return new_seq[::-1]
-
-
 def xlsheet_to_dict(filepath, sheet_name, ncol):
     # Helper function for ctRSD_seq_compile()
     
@@ -618,14 +602,18 @@ def write_genbank_text(sequence, locus_name="ctRSD_sequence", annotations=None, 
 
     return "".join(genbank_text_list)
 
-def domain_dict_to_seq_dict(domain_dict):
+def domain_dict_to_seq_dict(domain_dict, suffix=""):
     return {
         # Reverse Complement sequences
-        **{rc_seq(value[0], spec_out='rc')[1:-1]: key + "_rc" for key, value in domain_dict.items()},
+        **{rc_seq(value[0], spec_out='rc')[1:-1]: key + suffix + "_rc" for key, value in domain_dict.items()},
 
         # Forward sequences (overrides any duplicates with the same sequence)
-        **{value[0]: key for key, value in domain_dict.items()}
+        **{value[0]: key + suffix for key, value in domain_dict.items()}
     }
+
+
+def reverse_dict(d):
+    return {v: k for k, v in d.items()}
 
 
 '''
@@ -1925,41 +1913,36 @@ class RSD_sim:
                 plt.ylabel('Reacted reporter (%)',fontsize=fs)
                 plt.legend(['Raw Data','Calibrated'],frameon=False)
                 plt.title('k='+str(k_txn[n]))
-                
-            
-    def ctRSD_seq_compile(self,name,filepath=FILEPATH_DOMAINS,Rz='Ro',L='L',term='T7t',hp5='5hp',prom='T7p',\
-                                             eI='',eO='',s='',invert=0,invL='A',agL='TA',AGiloop=5,otype=1,\
-                                             rna=0,us=[],ds=[],temp_len=0,cp='',n='',c=0,d='',CDS='',rflap=''):
-        
-        '''
-        TO ADD:
-            AND gate output generator? 
-            Custom sequence input options for some of the optional variables
-                If the key provided doesnt match then assume it is custom seq to insert
-            
-        '''
-        
-        th_d = xlsheet_to_dict(filepath, 'th', 1)  # toehold sequences (th')
-        I_BM_d = xlsheet_to_dict(filepath, 'I BM', 1) # input branch migration seqeuences
-        O_BM_d = xlsheet_to_dict(filepath, 'O BM', 1) # output branch migration seqeuences
-        r_d = xlsheet_to_dict(filepath, 'r', 1)  # reversible domain on reporters
-        L_d = xlsheet_to_dict(filepath, 'L', 1)  # Linker for ribozyme
-        e_d = xlsheet_to_dict(filepath, 'e', 1) # extended branch migration domain
-        Rz_d = xlsheet_to_dict(filepath, 'Rz', 1)  # ribozymes
-        term_d = xlsheet_to_dict(filepath, 'terminators', 1)  # terminators
-        prom_d = xlsheet_to_dict(filepath, 'promoters', 1)  # promoters
-        hp5_d = xlsheet_to_dict(filepath, '5hp', 1)  # 5' hairpin sequences
-        s_d = xlsheet_to_dict(filepath, 's', 1)  # spacer sequences
-        us_d = xlsheet_to_dict(filepath, 'US', 1) # sequences upstream of promoter
-        ds_d = xlsheet_to_dict(filepath, 'DS', 1) # sequences downstream of terminator
-        cds_d = xlsheet_to_dict(filepath, 'CDS', 1) # CDS sequences for protein outputs
-        rflap_d = xlsheet_to_dict(filepath, 'rflap', 1) # fluorescent RNA aptamer sequences
-        cp_d = xlsheet_to_dict(filepath, 'c prime', 1) # c' linker between gate and n
-        n_d = xlsheet_to_dict(filepath, 'n', 1) # N-terminal linker between c' and CDS
-        c_d = xlsheet_to_dict(filepath, 'c', 1) # clamp adjacent to toehold, complementary to cp
-        d_d = xlsheet_to_dict(filepath, 'd', 1) # distal domain for translation
 
-        domain_to_name_d = {
+
+    def load_domains(self, filepath=FILEPATH_DOMAINS):
+        '''
+        This function compiles the domain sequences from the excel file into a dictionary
+        that can be used to generate sequences for the ctRSD simulator.
+        '''
+
+        # Key to Sequence Dictionaries
+        self.th_d = xlsheet_to_dict(filepath, 'th', 1)  # toehold sequences (th')
+        self.I_BM_d = xlsheet_to_dict(filepath, 'I BM', 1) # input branch migration seqeuences
+        self.O_BM_d = xlsheet_to_dict(filepath, 'O BM', 1) # output branch migration seqeuences
+        self.r_d = xlsheet_to_dict(filepath, 'r', 1)  # reversible domain on reporters
+        self.L_d = xlsheet_to_dict(filepath, 'L', 1)  # Linker for ribozyme
+        self.e_d = xlsheet_to_dict(filepath, 'e', 1) # extended branch migration domain
+        self.Rz_d = xlsheet_to_dict(filepath, 'Rz', 1)  # ribozymes
+        self.term_d = xlsheet_to_dict(filepath, 'terminators', 1)  # terminators
+        self.prom_d = xlsheet_to_dict(filepath, 'promoters', 1)  # promoters
+        self.hp5_d = xlsheet_to_dict(filepath, '5hp', 1)  # 5' hairpin sequences
+        self.s_d = xlsheet_to_dict(filepath, 's', 1)  # spacer sequences
+        self.us_d = xlsheet_to_dict(filepath, 'US', 1) # sequences upstream of promoter
+        self.ds_d = xlsheet_to_dict(filepath, 'DS', 1) # sequences downstream of terminator
+        self.cds_d = xlsheet_to_dict(filepath, 'CDS', 1) # CDS sequences for protein outputs
+        self.rflap_d = xlsheet_to_dict(filepath, 'rflap', 1) # fluorescent RNA aptamer sequences
+        self.cp_d = xlsheet_to_dict(filepath, 'c prime', 1) # c' linker between gate and n
+        self.n_d = xlsheet_to_dict(filepath, 'n', 1) # N-terminal linker between c' and CDS
+        self.c_d = xlsheet_to_dict(filepath, 'c', 1) # clamp adjacent to toehold, complementary to cp
+        self.d_d = xlsheet_to_dict(filepath, 'd', 1) # distal domain for translation
+
+        self.domain_to_name_d = {
             "th": "toehold",
             "i_bm": "inputBranchMigration",
             "o_bm": "outputBranchMigration",
@@ -1975,36 +1958,98 @@ class RSD_sim:
             "ds": "ds",
             "cds": "cds",
             "rflap": "rflap",
-            "cp": "clampDomainPrime",
+            "cp": "clampDomain",    # Clamp Domain Prime points to 'c' sheet
             "n": "nTerminalLinker",
             "c": "clampDomain",
             "d": "distalDomain",
             "cl": "cleavageSite"
         }
 
-        domain_to_seq_to_partID_d = {
-            domain_to_name_d["th"]: domain_dict_to_seq_dict(th_d),
-            domain_to_name_d["i_bm"]: domain_dict_to_seq_dict(I_BM_d),
-            domain_to_name_d["o_bm"]: domain_dict_to_seq_dict(O_BM_d),
-            domain_to_name_d["r"]: domain_dict_to_seq_dict(r_d),
-            domain_to_name_d["l"]: domain_dict_to_seq_dict(L_d),
-            domain_to_name_d["e"]: domain_dict_to_seq_dict(e_d),
-            domain_to_name_d["rz"]: domain_dict_to_seq_dict(Rz_d),
-            domain_to_name_d["term"]: domain_dict_to_seq_dict(term_d),
-            domain_to_name_d["prom"]: domain_dict_to_seq_dict(prom_d),
-            domain_to_name_d["hp5"]: domain_dict_to_seq_dict(hp5_d),
-            domain_to_name_d["s"]: domain_dict_to_seq_dict(s_d),
-            domain_to_name_d["us"]: domain_dict_to_seq_dict(us_d),
-            domain_to_name_d["ds"]: domain_dict_to_seq_dict(ds_d),
-            domain_to_name_d["cds"]: domain_dict_to_seq_dict(cds_d),
-            domain_to_name_d["rflap"]: domain_dict_to_seq_dict(rflap_d),
-            domain_to_name_d["cp"]: domain_dict_to_seq_dict(cp_d),
-            domain_to_name_d["n"]: domain_dict_to_seq_dict(n_d),
-            domain_to_name_d["c"]: domain_dict_to_seq_dict(c_d),
-            domain_to_name_d["d"]: domain_dict_to_seq_dict(d_d)
+        # {domain_name : {sequence : partID}}, assumes that sequences are unique across partIDs for a given domain
+        self.domain_to_seq_to_partID_d = {
+            self.domain_to_name_d["th"]: domain_dict_to_seq_dict(self.th_d),
+            self.domain_to_name_d["i_bm"]: domain_dict_to_seq_dict(self.I_BM_d, "_ibm"),
+            self.domain_to_name_d["o_bm"]: domain_dict_to_seq_dict(self.O_BM_d, "_obm"),
+            self.domain_to_name_d["r"]: domain_dict_to_seq_dict(self.r_d),
+            self.domain_to_name_d["l"]: domain_dict_to_seq_dict(self.L_d),
+            self.domain_to_name_d["e"]: domain_dict_to_seq_dict(self.e_d),
+            self.domain_to_name_d["rz"]: domain_dict_to_seq_dict(self.Rz_d),
+            self.domain_to_name_d["term"]: domain_dict_to_seq_dict(self.term_d),
+            self.domain_to_name_d["prom"]: domain_dict_to_seq_dict(self.prom_d),
+            self.domain_to_name_d["hp5"]: domain_dict_to_seq_dict(self.hp5_d),
+            self.domain_to_name_d["s"]: domain_dict_to_seq_dict(self.s_d),
+            self.domain_to_name_d["us"]: domain_dict_to_seq_dict(self.us_d),
+            self.domain_to_name_d["ds"]: domain_dict_to_seq_dict(self.ds_d),
+            self.domain_to_name_d["cds"]: domain_dict_to_seq_dict(self.cds_d),
+            self.domain_to_name_d["rflap"]: domain_dict_to_seq_dict(self.rflap_d),
+            #self.domain_to_name_d["cp"]: domain_dict_to_seq_dict(self.cp_d),
+            self.domain_to_name_d["n"]: domain_dict_to_seq_dict(self.n_d),
+            self.domain_to_name_d["c"]: domain_dict_to_seq_dict(self.c_d),
+            self.domain_to_name_d["d"]: domain_dict_to_seq_dict(self.d_d)
         }
 
+        # {domain_name : {partID : sequence}}, assumes that sequences are unique across partIDs for a given domain
+        self.domain_to_partID_to_seq_d = {k: reverse_dict(v) for k, v in self.domain_to_seq_to_partID_d.items()}
 
+        #print("Domain to sequence to part ID mapping:", self.domain_to_seq_to_partID_d[self.domain_to_name_d["c"]])
+           
+            
+    def ctRSD_seq_compile(self,
+        name,
+        Rz='Ro',
+        L='L',
+        term='T7t',
+        hp5='5hp',
+        prom='T7p',
+        eI='',
+        eO='',
+        s='',
+        invert=0,
+        invL='A',
+        agL='TA',
+        AGiloop=5,
+        otype=1,
+        rna=0,
+        us=[],
+        ds=[],
+        temp_len=0,
+        cp='',
+        n='',
+        c=0,
+        d='',
+        CDS='',
+        rflap='',
+        get_genbank=1):
+        
+        '''
+        TO ADD:
+            AND gate output generator? 
+            Custom sequence input options for some of the optional variables
+                If the key provided doesnt match then assume it is custom seq to insert
+            
+        '''
+        
+        th_d = self.th_d
+        I_BM_d = self.I_BM_d
+        O_BM_d = self.O_BM_d
+        r_d = self.r_d
+        L_d = self.L_d
+        e_d = self.e_d
+        Rz_d = self.Rz_d
+        term_d = self.term_d
+        prom_d = self.prom_d
+        hp5_d = self.hp5_d
+        s_d = self.s_d
+        us_d = self.us_d
+        ds_d = self.ds_d
+        cds_d = self.cds_d
+        rflap_d = self.rflap_d
+        cp_d = self.cp_d
+        n_d = self.n_d
+        c_d = self.c_d
+        d_d = self.d_d
+        domain_to_name_d = self.domain_to_name_d
+        domain_to_seq_to_partID_d = self.domain_to_seq_to_partID_d
         
         # converting into th' as code was originally written to handle that
         for m in th_d.keys():
@@ -3169,25 +3214,36 @@ class RSD_sim:
         rna_annotations = build_annotations(rna_features, domain_to_seq_to_partID_d)
         dna_annotations = build_annotations(dna_features, domain_to_seq_to_partID_d)
 
-        genbank_dna = write_genbank_text(
-            template[0].replace("|", ""),  
-            name.replace("{", "_").replace("}", "_").replace(",", "_"), 
-            dna_annotations,
-            rna=False
-        )
+        genbank_dna = None
+        genbank_rna = None
+        if get_genbank:
+            genbank_dna = write_genbank_text(
+                template[0].replace("|", ""),  
+                name.replace("{", "_").replace("}", "_").replace(",", "_"), 
+                dna_annotations,
+                rna=False
+            )
 
-        genbank_rna = write_genbank_text(
-            template[1].replace("|", ""), 
-            name.replace("{", "_").replace("}", "_").replace(",", "_"), 
-            rna_annotations,
-            rna=True
-        )
+            genbank_rna = write_genbank_text(
+                template[1].replace("|", ""), 
+                name.replace("{", "_").replace("}", "_").replace(",", "_"), 
+                rna_annotations,
+                rna=True
+            )
 
+        # Extract part IDs and types from annotations
         dna_part_IDs = [part['qualifiers']['note'] for part in dna_annotations]
         rna_part_IDs = [part['qualifiers']['note'] for part in rna_annotations]
         dna_part_types = [part['part_type'] for part in dna_annotations]
         rna_part_types = [part['part_type'] for part in rna_annotations]
 
+        # Determine the orientation of each part based on the presence of the "_rc" suffix
+        dna_part_orientations = ["reverse_complement" if part.endswith("_rc") else "forward" for part in dna_part_IDs]
+        rna_part_orientations = ["reverse_complement" if part.endswith("_rc") else "forward" for part in rna_part_IDs]
+
+        # Format part IDs: Remove the "_rc" suffix from part IDs
+        dna_part_IDs = [part.replace("_rc", "") for part in dna_part_IDs]
+        rna_part_IDs = [part.replace("_rc", "") for part in rna_part_IDs]
         
         return(
             template[0], 
@@ -3196,12 +3252,8 @@ class RSD_sim:
             rna_part_IDs,
             dna_part_types,
             rna_part_types,
-            genbank_dna, 
+            dna_part_orientations,
+            rna_part_orientations,
+            genbank_dna,
             genbank_rna
         )
-
-
-
-
-
-
