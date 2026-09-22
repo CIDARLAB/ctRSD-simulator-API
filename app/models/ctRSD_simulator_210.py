@@ -19,7 +19,7 @@ import xlrd
 # xlrd.xlsx.Element_has_iter = True
 
 import os
-FILEPATH_DOMAINS = os.path.join(os.path.dirname(__file__), "..", "domains", "ctRSD_domains_list_210.xls")
+FILEPATH_DOMAINS = os.path.join(os.path.dirname(__file__), "..", "domains", "ctRSD_domains_list_300.xls")
 FILEPATH_OUTPUTS = os.path.join(os.path.dirname(__file__), "..", "outputs")
 
 '''
