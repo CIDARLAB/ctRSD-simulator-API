@@ -257,8 +257,12 @@ def rc_seq(seq, spec_out='rc', rna=0):
 
 def xlsheet_to_dict(filepath, sheet_name, ncol):
     # Helper function for ctRSD_seq_compile()
-    
-    seq_workbook = xlrd.open_workbook(filepath)
+
+    if isinstance(filepath, bytes):
+        seq_workbook = xlrd.open_workbook(file_contents=filepath)
+    else:
+        seq_workbook = xlrd.open_workbook(filepath)
+
     sheet = seq_workbook.sheet_by_name(sheet_name)
     sheet_dict = {}
     dv = [[0]*ncol for i in range(0, sheet.nrows)]
@@ -3209,8 +3213,11 @@ class RSD_sim:
         else:
             print('Incorrect Nomenclature')
 
+        dna_features = [{"us": [us_S, str(us)]}] if us else []
+        dna_features += [{domain_to_name_d["prom"]: [prom_S, str(prom)]}]
+        dna_features += rna_features 
+        dna_features += [{"ds": [ds_S, str(ds)]}] if ds else []
 
-        dna_features = [{"us": [us_S, str(us)]}, {domain_to_name_d["prom"]: [prom_S, str(prom)]}] + rna_features + [{"ds": [ds_S, str(ds)]}]
         rna_annotations = build_annotations(rna_features, domain_to_seq_to_partID_d)
         dna_annotations = build_annotations(dna_features, domain_to_seq_to_partID_d)
 

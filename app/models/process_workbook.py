@@ -38,9 +38,9 @@ def process_sheet(sheet: Workbook):
 
     return data
 
-def compile_workbook_data(data, num_rows, get_genbank=0):
+def compile_workbook_data(data, num_rows, domains_file=FILEPATH_DOMAINS, get_genbank=0):
     model = RSD_sim()
-    model.load_domains(FILEPATH_DOMAINS)
+    model.load_domains(domains_file)
 
     name = []
     dna_template = []

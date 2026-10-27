@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -102,6 +102,96 @@ def compile(request: CompileRequest):
     )
 
 
+@api.post('/compile/custom-domains')
+def compile_with_custom_domains(
+    name      : str = Form(..., description="Name of the sequence to compile"),
+    Rz        : str = Form('Ro', description="Ribozyme parameter"),
+    L         : str = Form('L', description="Ribozyme Linker parameter"),
+    term      : str = Form('T7t', description="Terminator parameter"),
+    hp5       : str = Form('5hp', description="Hairpin 5' parameter"),
+    prom      : str = Form('T7p', description="Promoter parameter"),
+    eI        : str = Form('', description="eI parameter"),
+    eO        : str = Form('', description="eO parameter"),
+    s         : str = Form('', description="s parameter"),
+    invert    : int = Form(0, description="invert parameter"),
+    invL      : str = Form('A', description="invL parameter"),
+    agL       : str = Form('TA', description="agL parameter"),
+    AGiloop   : int = Form(5, description="AGiloop parameter"),
+    otype     : int = Form(1, description="otype parameter"),
+    rna       : int = Form(0, description="rna parameter"),
+    us        : List[str] = Form([], description="us parameter"),
+    ds        : List[str] = Form([], description="ds parameter"),
+    temp_len  : int = Form(0, description="temp_len parameter"),
+    cp        : str = Form('', description="cp parameter"),
+    n         : str = Form('', description="n parameter"),
+    c         : int = Form(0, description="c parameter"),
+    d         : str = Form('', description="d parameter"),
+    CDS       : str = Form('', description="CDS parameter"),
+    rflap     : str = Form('', description="rflap parameter"),
+    domains_file: UploadFile = File(...)
+):
+    
+    model = RSD_sim()
+    model.load_domains(domains_file.file.read())
+
+    for value in us:
+        if value:
+            us = [domain.strip() for domain in value.split(",")]
+        else:
+            us = []
+
+    for value in ds:
+        if value:
+            ds = [domain.strip() for domain in value.split(",")]
+        else:
+            ds = []
+
+    #print("Compiling sequence with the following parameters:", request.dict())
+    print(us)
+    print(ds)
+    print()
+    result = model.ctRSD_seq_compile(
+        name = name,
+        Rz = Rz,
+        L = L,
+        term = term,
+        hp5 = hp5,
+        prom = prom,
+        eI = eI,
+        eO = eO,
+        s = s,
+        invert = invert,
+        invL = invL,
+        agL = agL,
+        AGiloop = AGiloop,
+        otype = otype,
+        rna = rna,
+        us = us,
+        ds = ds,
+        temp_len = temp_len,
+        cp = cp,
+        n = n,
+        c = c,
+        d = d,
+        CDS = CDS,
+        rflap = rflap
+    )
+    #print("Compilation result:", result)
+
+    return CompileResponse(
+        dna_template=result[0],
+        rna_template=result[1],
+        dna_part_IDs=result[2],
+        rna_part_IDs=result[3],
+        dna_part_types=result[4],
+        rna_part_types=result[5],
+        dna_part_orientations=result[6],
+        rna_part_orientations=result[7],
+        genbank_dna=result[8],
+        genbank_rna=result[9]
+    )
+
+
 class CompileExcelResponse(BaseModel):
     name: List[List[str]] = Field(..., description="List of names for each row and sheet")
     dna_template: List[List[str]] = Field(..., description="DNA template sequence")
@@ -133,6 +223,45 @@ def compile_workbook(workbook: UploadFile = File(...), get_genbank: int = 0):
     print("Compilation results:", results.keys())
     #print("\n\nUnique parts:", results['unique_parts'])
     print("\n\nNumber of unique parts:", len(results['unique_parts']))
+    return CompileExcelResponse(
+        name=results['name'],
+        dna_template=results['dna_template'],
+        rna_template=results['rna_template'],
+        dna_part_IDs=results['dna_part_IDs'],
+        rna_part_IDs=results['rna_part_IDs'],
+        dna_part_types=results['dna_part_types'],
+        rna_part_types=results['rna_part_types'],
+        dna_part_orientations=results['dna_part_orientations'],
+        rna_part_orientations=results['rna_part_orientations'],
+        genbank_dna=results['genbank_dna'],
+        genbank_rna=results['genbank_rna'],
+        unique_parts=results['unique_parts']
+    )
+
+@api.post('/compile/excel/custom-domains')
+def compile_workbook(
+    workbook: UploadFile = File(...), 
+    domains_file: UploadFile = File(...), 
+    get_genbank: int = 0
+):
+    if not workbook.filename:
+        raise HTTPException(400, "Workbook filename is missing")
+    
+    if not workbook.filename.lower().endswith(".xlsx"):
+        raise HTTPException(400, "Expected an .xlsx workbook")
+    
+    if not domains_file.filename:
+        raise HTTPException(400, "Domains file filename is missing")
+
+    if not domains_file.filename.lower().endswith(".xls"):
+        raise HTTPException(400, "Expected an .xls domains file")
+
+    # Process the workbook file here
+    data, num_rows = process_workbook(workbook)
+
+    # Compile 
+    results = compile_workbook_data(data, num_rows, domains_file=domains_file.file.read(), get_genbank=get_genbank)
+
     return CompileExcelResponse(
         name=results['name'],
         dna_template=results['dna_template'],
