@@ -158,10 +158,10 @@ def get_domains():
         return JSONResponse(content=jsonable_encoder({"error": "Internal server error occurred"}), status_code=500)
 
 
-@api.get('/hello')
-def hello():
+@api.get('/health')
+def health():
     try:
-        return JSONResponse(content=jsonable_encoder({"message": "Hello, world!"}))
+        return JSONResponse(content=jsonable_encoder({"message": "Healthy"}), status_code=200)
     except Exception as e:
         return JSONResponse(content=jsonable_encoder({"error": "Internal server error occurred"}), status_code=500)
 
